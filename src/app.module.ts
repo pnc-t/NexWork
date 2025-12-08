@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { HealthController } from './health/health.controller';
+import { WebSocketsModule } from './websockets/websockets.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { HealthController } from './health/health.controller';
     UsersModule,
     ProjectsModule,
     TasksModule,
+    WebSocketsModule,
   ],
   controllers: [HealthController],
 })

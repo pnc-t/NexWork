@@ -7,10 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
+import {WebSocketsGateway} from "../websockets/websockets.gateway";
 
 @Injectable()
 export class TasksService {
-    constructor(private readonly prisma:PrismaService) {}
+    constructor(
+        private readonly prisma:PrismaService,
+        private readonly websockets: WebSocketsGateway,
+        ) {}
 
     async create(userId: string, createTaskDto: CreateTaskDto) {
         const { projectId, dependsOn, ...taskData } = createTaskDto;
@@ -21,7 +25,7 @@ export class TasksService {
             await this.validateDependencies(dependsOn, projectId);
         }
 
-        return this.prisma.task.create({
+        const task = await this.prisma.task.create({
             data:{
                 ...taskData,
                 projectId,
@@ -55,6 +59,9 @@ export class TasksService {
                 },
             },
         });
+
+        this.websockets.notifyTaskCreated(task.projectId, task);
+        return task;
     }
 
     async findAll(userId:string, projectId?:string){
@@ -166,7 +173,7 @@ export class TasksService {
     async update(taskId:string,userId:string, updateTaskDto:UpdateTaskDto) {
         const task = await this.findOne(taskId, userId);
 
-        return this.prisma.task.update({
+        const updateTask = await this.prisma.task.update({
             where:{id: taskId},
             data: updateTaskDto,
             include:{
@@ -184,6 +191,10 @@ export class TasksService {
                 },
             },
         });
+        this.websockets.notifyTaskUpdated(updateTask.projectId, taskId, updateTask);
+        return updateTask;
+
+
     }
 
     async remove(taskId:string ,userId:string){

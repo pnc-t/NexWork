@@ -7,13 +7,18 @@ import {PrismaService} from "../prisma/prisma.service";
 import {CreateProjectDto} from "./dto/create-project.dto";
 import {UpdateProjectDto} from "./dto/update-project.dto";
 import {AddMemberDto} from "./dto/add-member.dto";
+import {WebSocketsGateway} from "../websockets/websockets.gateway";
 
 @Injectable()
 export class ProjectsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly websockets: WebSocketsGateway
+    ) {}
+
 
     async create(userId: string, createProjectDto:CreateProjectDto) {
-        return this.prisma.project.create({
+        const project = await this.prisma.project.create({
             data:{
                 ...createProjectDto,
                 members:{
@@ -42,6 +47,9 @@ export class ProjectsService {
                 },
             },
         });
+
+        this.websockets.notifyProjectCreated(project.id, project);
+        return project;
     }
 
     async findAll(userId:string) {
@@ -126,7 +134,7 @@ export class ProjectsService {
     async update(projectId:string, userId:string, updateProjectDto:UpdateProjectDto) {
         await this.checkPermission(projectId, userId,['owner','admin']);
 
-        return this.prisma.project.update({
+        const project = await this.prisma.project.update({
             where:{ id:projectId },
             data: updateProjectDto,
             include:{
@@ -143,6 +151,9 @@ export class ProjectsService {
                 },
             },
         });
+
+        this.websockets.notifyProjectUpdated(projectId, project);
+        return project;
     }
 
     async remove(projectId: string, userId: string) {
