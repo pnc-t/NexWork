@@ -61,7 +61,7 @@ export class ProjectsController {
         return this.projectsService.addMember(id,userId, addMemberDto);
     }
 
-    @Delete(':id/members/:id')
+    @Delete(':id/members/:memberId')
     removeMember(
         @Param('id') id: string,
         @CurrentUser('id') userId: string,

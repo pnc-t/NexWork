@@ -12,6 +12,8 @@ model User {
   email     String   @unique
   password  String
   name      String
+  bio       String? // 追加
+  avatar    String? // 追加
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
