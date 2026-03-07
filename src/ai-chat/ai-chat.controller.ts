@@ -9,12 +9,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AiChatService } from './ai-chat.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import type { AiProviderType } from './providers/ai-provider.factory';
 
+@SkipThrottle({ auth: true })
 @Controller('ai-chat')
 @UseGuards(JwtAuthGuard)
 export class AiChatController {

@@ -13,8 +13,10 @@ import { MilestonesService } from './milestones.service';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
+@SkipThrottle({ auth: true })
 @Controller('milestones')
 @UseGuards(JwtAuthGuard)
 export class MilestonesController {

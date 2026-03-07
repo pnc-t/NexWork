@@ -9,9 +9,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { NotificationsService } from './notifications.service';
 
+@SkipThrottle({ auth: true })
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {

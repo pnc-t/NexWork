@@ -29,6 +29,7 @@ model User {
   sentInvitations     ProjectInvitation[] @relation("InvitationsSent")
   receivedInvitations ProjectInvitation[] @relation("InvitationsReceived")
   chatConversations   ChatConversation[]
+  timeEntries         TimeEntry[]
 }
 
 model Project {
@@ -92,6 +93,7 @@ model Task {
   attachments  TaskAttachment[]
   activityLogs ActivityLog[]
   tags         TaskTag[]
+  timeEntries  TimeEntry[]
 
   @@index([projectId])
   @@index([assigneeId])
@@ -303,6 +305,27 @@ model ChatConversation {
 
   @@index([userId])
   @@index([projectId])
+}
+
+// 工数記録
+model TimeEntry {
+  id          String    @id @default(uuid())
+  hours       Float
+  description String?
+  date        DateTime  @default(now()) @db.Date
+  startTime   DateTime?
+  endTime     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([date])
 }
 
 // チャットメッセージ

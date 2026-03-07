@@ -13,6 +13,8 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CreateSubtaskDto } from './dto/create-subtask.dto';
 import { UpdateSubtaskDto } from './dto/update-subtask.dto';
 import { ReorderSubtasksDto } from './dto/reorder-subtasks.dto';
+import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
+import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
 
 @Injectable()
 export class TasksService {
@@ -694,6 +696,109 @@ export class TasksService {
     );
 
     return { message: '依存関係を削除しました' };
+  }
+
+  // 工数記録機能
+  async getTimeEntries(taskId: string, userId: string) {
+    await this.findOne(taskId, userId);
+
+    return this.prisma.timeEntry.findMany({
+      where: { taskId },
+      include: {
+        user: {
+          select: { id: true, name: true, avatar: true },
+        },
+      },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async createTimeEntry(taskId: string, userId: string, dto: CreateTimeEntryDto) {
+    await this.findOne(taskId, userId);
+
+    const entry = await this.prisma.timeEntry.create({
+      data: {
+        taskId,
+        userId,
+        hours: dto.hours,
+        description: dto.description,
+        date: dto.date ? new Date(dto.date) : new Date(),
+        startTime: dto.startTime ? new Date(dto.startTime) : undefined,
+        endTime: dto.endTime ? new Date(dto.endTime) : undefined,
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, avatar: true },
+        },
+      },
+    });
+
+    // 活動履歴を記録
+    await this.createActivityLog(taskId, userId, 'updated', null, null, null, `工数 ${dto.hours}時間 を記録しました`);
+
+    // タスクの実績工数を自動更新
+    await this.recalcActualHours(taskId);
+
+    return entry;
+  }
+
+  async updateTimeEntry(taskId: string, entryId: string, userId: string, dto: UpdateTimeEntryDto) {
+    await this.findOne(taskId, userId);
+
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id: entryId } });
+    if (!entry || entry.taskId !== taskId) {
+      throw new NotFoundException('工数記録が見つかりません');
+    }
+    if (entry.userId !== userId) {
+      throw new ForbiddenException('他のユーザーの工数記録は編集できません');
+    }
+
+    const updated = await this.prisma.timeEntry.update({
+      where: { id: entryId },
+      data: {
+        ...(dto.hours !== undefined && { hours: dto.hours }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.date !== undefined && { date: new Date(dto.date) }),
+        ...(dto.startTime !== undefined && { startTime: new Date(dto.startTime) }),
+        ...(dto.endTime !== undefined && { endTime: new Date(dto.endTime) }),
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, avatar: true },
+        },
+      },
+    });
+
+    await this.recalcActualHours(taskId);
+    return updated;
+  }
+
+  async deleteTimeEntry(taskId: string, entryId: string, userId: string) {
+    await this.findOne(taskId, userId);
+
+    const entry = await this.prisma.timeEntry.findUnique({ where: { id: entryId } });
+    if (!entry || entry.taskId !== taskId) {
+      throw new NotFoundException('工数記録が見つかりません');
+    }
+    if (entry.userId !== userId) {
+      throw new ForbiddenException('他のユーザーの工数記録は削除できません');
+    }
+
+    await this.prisma.timeEntry.delete({ where: { id: entryId } });
+    await this.recalcActualHours(taskId);
+
+    return { message: '工数記録を削除しました' };
+  }
+
+  private async recalcActualHours(taskId: string) {
+    const aggregate = await this.prisma.timeEntry.aggregate({
+      where: { taskId },
+      _sum: { hours: true },
+    });
+    await this.prisma.task.update({
+      where: { id: taskId },
+      data: { actualHours: aggregate._sum.hours ?? 0 },
+    });
   }
 
   // 循環依存チェック（深さ優先探索）

@@ -21,9 +21,13 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CreateSubtaskDto } from './dto/create-subtask.dto';
 import { UpdateSubtaskDto } from './dto/update-subtask.dto';
 import { ReorderSubtasksDto } from './dto/reorder-subtasks.dto';
+import { CreateTimeEntryDto } from './dto/create-time-entry.dto';
+import { UpdateTimeEntryDto } from './dto/update-time-entry.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 
+@SkipThrottle({ auth: true })
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
 export class TasksController {
@@ -224,6 +228,40 @@ export class TasksController {
   @Get(':id/activity')
   getActivityLogs(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.tasksService.getActivityLogs(id, userId);
+  }
+
+  // 工数記録機能
+  @Get(':id/time-entries')
+  getTimeEntries(@Param('id') id: string, @CurrentUser('id') userId: string) {
+    return this.tasksService.getTimeEntries(id, userId);
+  }
+
+  @Post(':id/time-entries')
+  createTimeEntry(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateTimeEntryDto,
+  ) {
+    return this.tasksService.createTimeEntry(id, userId, dto);
+  }
+
+  @Patch(':id/time-entries/:entryId')
+  updateTimeEntry(
+    @Param('id') id: string,
+    @Param('entryId') entryId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateTimeEntryDto,
+  ) {
+    return this.tasksService.updateTimeEntry(id, entryId, userId, dto);
+  }
+
+  @Delete(':id/time-entries/:entryId')
+  deleteTimeEntry(
+    @Param('id') id: string,
+    @Param('entryId') entryId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.tasksService.deleteTimeEntry(id, entryId, userId);
   }
 
   // 依存関係管理

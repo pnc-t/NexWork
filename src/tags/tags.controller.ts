@@ -13,8 +13,10 @@ import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
+@SkipThrottle({ auth: true })
 @Controller('tags')
 @UseGuards(JwtAuthGuard)
 export class TagsController {

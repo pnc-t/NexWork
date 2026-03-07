@@ -15,8 +15,10 @@ import { AddMemberDto } from './dto/add-member.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { RespondInvitationDto } from './dto/respond-invitation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
+@SkipThrottle({ auth: true })
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
 export class ProjectsController {

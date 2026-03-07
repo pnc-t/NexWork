@@ -18,10 +18,12 @@ import { extname } from 'path';
 import { UsersService } from './users.service';
 import { ProjectsService } from '../projects/projects.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+@SkipThrottle({ auth: true })
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
