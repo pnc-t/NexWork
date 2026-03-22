@@ -102,6 +102,21 @@ export default function ProjectDetailPage() {
     };
   }, [projectId]);
 
+
+  // ガントモード時はmainのスクロールとパディングを無効化
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (!main) return;
+    if (viewMode === 'gantt') {
+      main.style.overflowY = 'hidden';
+      main.style.padding = '0';
+    }
+    return () => {
+      main.style.overflowY = '';
+      main.style.padding = '';
+    };
+  }, [viewMode]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -180,26 +195,42 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className={viewMode === 'gantt' ? '-mx-6 lg:-mx-8 -mt-6 lg:-mt-8 -mb-6 lg:-mb-8 flex flex-col h-screen' : ''}>
+    <div className={viewMode === 'gantt' ? 'flex flex-col h-full' : ''}>
       {/* ヘッダー */}
-      <div className={`flex items-start justify-between ${viewMode === 'gantt' ? 'px-6 lg:px-8 pt-6 lg:pt-8 pb-3 flex-shrink-0' : 'mb-6'}`}>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-          {project.description && (
-            <p className="text-gray-600 mt-1">{project.description}</p>
-          )}
-          <div className="flex items-center gap-4 mt-3">
-            <button
-              onClick={() => setShowMemberDialog(true)}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-            >
-              <Users className="w-4 h-4" />
-              <span>{project.members.length} メンバー</span>
-            </button>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>{allTasks.length} タスク</span>
+      <div className={`flex items-start justify-between ${viewMode === 'gantt' ? 'px-4 lg:px-6 pt-3 pb-1 flex-shrink-0' : 'mb-6'}`}>
+        <div className="flex-1 min-w-0">
+          {viewMode === 'gantt' ? (
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-bold text-gray-900 truncate">{project.name}</h1>
+              <button
+                onClick={() => setShowMemberDialog(true)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 transition-colors flex-shrink-0"
+              >
+                <Users className="w-3 h-3" />
+                <span>{project.members.length}</span>
+              </button>
+              <span className="text-xs text-gray-500 flex-shrink-0">{allTasks.length} タスク</span>
             </div>
-          </div>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              {project.description && (
+                <p className="text-gray-600 mt-1">{project.description}</p>
+              )}
+              <div className="flex items-center gap-4 mt-3">
+                <button
+                  onClick={() => setShowMemberDialog(true)}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>{project.members.length} メンバー</span>
+                </button>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>{allTasks.length} タスク</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isOwner && (
@@ -231,7 +262,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* ビュー切り替え */}
-      <div className={`flex gap-2 border-b border-gray-200 overflow-x-auto flex-shrink-0 ${viewMode === 'gantt' ? 'px-6 lg:px-8' : 'mb-6'}`}>
+      <div className={`flex gap-2 border-b border-gray-200 overflow-x-auto flex-shrink-0 ${viewMode === 'gantt' ? 'px-4 lg:px-6' : 'mb-6'}`}>
         <button
           onClick={() => setViewMode('board')}
           className={`flex items-center gap-2 px-4 py-2 border-b-2 transition-colors whitespace-nowrap ${

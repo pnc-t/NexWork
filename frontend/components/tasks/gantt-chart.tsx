@@ -48,7 +48,7 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
   const [connectPreviewEnd, setConnectPreviewEnd] = useState<{ x: number; y: number } | null>(null);
   const [cellWidth, setCellWidth] = useState(50);
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
-  const [showStats, setShowStats] = useState(false);
+
   const [hoveredConnectId, setHoveredConnectId] = useState<string | null>(null);
   const [hoveredDepIndex, setHoveredDepIndex] = useState<number | null>(null);
   const [groupByMilestone, setGroupByMilestone] = useState(true);
@@ -669,7 +669,7 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
     return (
       <div className="flex border-b border-gray-200 bg-gradient-to-r from-indigo-50/80 to-blue-50/80 h-16">
         {/* 左側（固定） */}
-        <div className="w-96 flex-shrink-0 px-3 border-r border-gray-200 h-full flex items-center sticky left-0 z-[60] bg-indigo-50/80">
+        <div className="w-96 flex-shrink-0 px-3 border-r border-gray-200 h-full flex items-center sticky left-0 z-30 bg-indigo-50/80">
           <div className="flex items-center gap-3 w-full">
             <button
               onClick={() => toggleMilestone(group.milestone?.id || 'none')}
@@ -715,199 +715,147 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
 
   return (
     <div className="bg-white flex flex-col h-full">
-      {/* ヘッダーとフィルター */}
-      <div className="p-4 border-b border-gray-200 space-y-3 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">ガントチャート</h3>
-          <div className="flex items-center gap-2">
-            {/* ズームボタン */}
-            <div className="flex items-center gap-1 bg-gray-100 rounded-md p-1">
-              <button
-                onClick={() => setCellWidth(30)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  cellWidth === 30 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <ZoomOut className="w-3 h-3 inline mr-0.5" />
-                小
-              </button>
-              <button
-                onClick={() => setCellWidth(50)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  cellWidth === 50 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                中
-              </button>
-              <button
-                onClick={() => setCellWidth(70)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  cellWidth === 70 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <ZoomIn className="w-3 h-3 inline mr-0.5" />
-                大
-              </button>
-            </div>
-            {/* 今日へ移動ボタン */}
-            <button
-              onClick={scrollToToday}
-              className="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-            >
-              <Crosshair className="w-4 h-4 inline mr-1" />
-              今日へ移動
-            </button>
-            <button
-              onClick={() => setShowDependencies(!showDependencies)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                showDependencies
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Link2 className="w-4 h-4 inline mr-1" />
-              依存関係 {dependencyCount > 0 && `(${dependencyCount})`}
-            </button>
-            <button
-              onClick={() => {
-                setConnectMode(!connectMode);
-                setConnectFrom(null);
-                setConnectPreviewEnd(null);
-              }}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                connectMode
-                  ? 'bg-orange-500 text-white ring-2 ring-orange-300'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              title="タスクバーの右端をクリックして接続元を選択し、別タスクの左端をクリックして依存関係を作成します"
-            >
-              <Link2 className="w-4 h-4 inline mr-1" />
-              {connectMode
-                ? (connectFrom ? '接続先を選択中...' : '接続元を選択中...')
-                : '依存関係を結ぶ'}
-            </button>
-            <button
-              onClick={() => setShowMyTasksOnly(!showMyTasksOnly)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                showMyTasksOnly
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <User className="w-4 h-4 inline mr-1" />
-              自分のタスクのみ
-            </button>
-          </div>
-        </div>
-
-        {/* フィルターとソート */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500" />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1"
-            >
-              <option value="all">全ステータス</option>
-              <option value="todo">未着手</option>
-              <option value="in_progress">進行中</option>
-              <option value="done">完了</option>
-            </select>
-
-            <select
-              value={filterPriority}
-              onChange={(e) => setFilterPriority(e.target.value)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1"
-            >
-              <option value="all">全優先度</option>
-              <option value="high">高</option>
-              <option value="medium">中</option>
-              <option value="low">低</option>
-            </select>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="text-sm border border-gray-300 rounded-md px-2 py-1"
-            >
-              <option value="dueDate">期限順</option>
-              <option value="priority">優先度順</option>
-              <option value="status">ステータス順</option>
-            </select>
-          </div>
+      {/* ツールバー（1行に統合） */}
+      <div className="px-3 py-1.5 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* フィルター */}
+          <Filter className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-1.5 py-1"
+          >
+            <option value="all">全ステータス</option>
+            <option value="todo">未着手</option>
+            <option value="in_progress">進行中</option>
+            <option value="done">完了</option>
+          </select>
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="text-xs border border-gray-300 rounded px-1.5 py-1"
+          >
+            <option value="all">全優先度</option>
+            <option value="high">高</option>
+            <option value="medium">中</option>
+            <option value="low">低</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="text-xs border border-gray-300 rounded px-1.5 py-1"
+          >
+            <option value="dueDate">期限順</option>
+            <option value="priority">優先度順</option>
+            <option value="status">ステータス順</option>
+          </select>
 
           {milestones.length > 0 && (
-            <div className="flex items-center gap-2">
+            <>
+              <div className="w-px h-4 bg-gray-300" />
               <button
                 onClick={() => setGroupByMilestone(!groupByMilestone)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                   groupByMilestone
                     ? 'bg-indigo-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                <Flag className="w-4 h-4 inline mr-1" />
+                <Flag className="w-3 h-3 inline mr-0.5" />
                 マイルストーン別
               </button>
-
               {groupByMilestone && (
                 <>
-                  <button
-                    onClick={expandAllMilestones}
-                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900"
-                  >
-                    すべて展開
-                  </button>
-                  <button
-                    onClick={collapseAllMilestones}
-                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-900"
-                  >
-                    すべて折りたたむ
-                  </button>
+                  <button onClick={expandAllMilestones} className="text-[10px] text-gray-500 hover:text-gray-900">すべて展開</button>
+                  <button onClick={collapseAllMilestones} className="text-[10px] text-gray-500 hover:text-gray-900">すべて折りたたむ</button>
                 </>
               )}
-            </div>
+            </>
           )}
-        </div>
 
-        {/* 統計情報（折りたたみ可能） */}
-        <div>
+          <div className="w-px h-4 bg-gray-300" />
+
+          {/* ズーム */}
+          <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+            <button
+              onClick={() => setCellWidth(30)}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                cellWidth === 30 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ZoomOut className="w-3 h-3 inline" />
+            </button>
+            <button
+              onClick={() => setCellWidth(50)}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                cellWidth === 50 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              中
+            </button>
+            <button
+              onClick={() => setCellWidth(70)}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                cellWidth === 70 ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ZoomIn className="w-3 h-3 inline" />
+            </button>
+          </div>
+
           <button
-            onClick={() => setShowStats(!showStats)}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            onClick={scrollToToday}
+            className="px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
           >
-            <ChevronRight className={`w-3 h-3 transition-transform ${showStats ? 'rotate-90' : ''}`} />
-            統計 — 完了 {stats.completed}/{stats.total} · 進行中 {stats.inProgress} · 遅延 {stats.overdue} · 達成率 {stats.completionRate}%
+            <Crosshair className="w-3 h-3 inline mr-0.5" />
+            今日へ移動
           </button>
-          {showStats && (
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-2">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <div className="text-xs text-gray-600 mb-1">総タスク</div>
-                <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              </div>
-              <div className="bg-green-50 rounded-lg p-3">
-                <div className="text-xs text-green-600 mb-1">完了</div>
-                <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <div className="text-xs text-blue-600 mb-1">進行中</div>
-                <div className="text-2xl font-bold text-blue-600">{stats.inProgress}</div>
-              </div>
-              <div className="bg-red-50 rounded-lg p-3">
-                <div className="text-xs text-red-600 mb-1">遅延</div>
-                <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <div className="text-xs text-blue-600 mb-1">自分</div>
-                <div className="text-2xl font-bold text-blue-600">{stats.myTasks}</div>
-              </div>
-              <div className="bg-purple-50 rounded-lg p-3">
-                <div className="text-xs text-purple-600 mb-1">達成率</div>
-                <div className="text-2xl font-bold text-purple-600">{stats.completionRate}%</div>
-              </div>
-            </div>
-          )}
+          <button
+            onClick={() => setShowDependencies(!showDependencies)}
+            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              showDependencies
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <Link2 className="w-3 h-3 inline mr-0.5" />
+            依存関係{dependencyCount > 0 && ` (${dependencyCount})`}
+          </button>
+          <button
+            onClick={() => {
+              setConnectMode(!connectMode);
+              setConnectFrom(null);
+              setConnectPreviewEnd(null);
+            }}
+            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              connectMode
+                ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            title="タスクバーをクリックして依存関係を作成"
+          >
+            <Link2 className="w-3 h-3 inline mr-0.5" />
+            {connectMode
+              ? (connectFrom ? '接続先を選択...' : '接続元を選択...')
+              : '依存関係を結ぶ'}
+          </button>
+          <button
+            onClick={() => setShowMyTasksOnly(!showMyTasksOnly)}
+            className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+              showMyTasksOnly
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <User className="w-3 h-3 inline mr-0.5" />
+            自分のタスクのみ
+          </button>
+
+          {/* 統計情報（インライン） */}
+          <div className="w-px h-4 bg-gray-300" />
+          <span className="text-[10px] text-gray-500">
+            完了 {stats.completed}/{stats.total} · 進行中 {stats.inProgress} · 遅延 {stats.overdue} · 達成率 {stats.completionRate}%
+          </span>
         </div>
       </div>
 
@@ -917,8 +865,8 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
       >
         <div style={{ minWidth: `${384 + totalDays * cellWidth}px` }} className="relative" ref={contentRef}>
           {/* タイムラインヘッダー */}
-          <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-[60]">
-            <div className="w-96 flex-shrink-0 p-3 border-r border-gray-200 h-20 flex items-center sticky left-0 z-[60] bg-gray-50">
+          <div className="flex border-b border-gray-200 bg-gray-50 sticky top-0 z-30">
+            <div className="w-96 flex-shrink-0 p-3 border-r border-gray-200 h-20 flex items-center sticky left-0 z-30 bg-gray-50">
               <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-gray-700 w-full">
                 <div className="col-span-5">タスク</div>
                 <div className="col-span-2">優先度</div>
@@ -1009,7 +957,7 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
                   >
                     {/* タスク情報 */}
                     <div
-                      className={`w-96 flex-shrink-0 p-3 border-r border-gray-200 h-24 flex items-center sticky left-0 z-100 cursor-pointer hover:bg-gray-100 transition-colors ${
+                      className={`w-96 flex-shrink-0 p-3 border-r border-gray-200 h-24 flex items-center sticky left-0 z-40 cursor-pointer hover:bg-gray-100 transition-colors ${
                         myTask ? 'bg-blue-50' : 'bg-white'
                       }`}
                       onClick={() => router.push(`/tasks/${task.id}`)}
@@ -1365,14 +1313,14 @@ export function GanttChart({ tasks, onUpdate, milestones = [] }: GanttChartProps
               {((showDependencies && dependencyLines.length > 0) || (connectMode && connectFrom)) && (
                 <svg
                   ref={svgRef}
-                  className="absolute left-96 z-50"
+                  className="absolute left-96 z-20"
                   style={{
                     pointerEvents: 'none',
                     width: `${days.length * cellWidth}px`,
                     height: `${(() => {
                       let totalHeight = 0;
-                      const headerHeight = 64; // h-16 = 64px (border-box含む)
-                      const rowHeight = 96; // h-24 = 96px (2段表示のため)
+                      const headerHeight = 64; // h-16 = 64px
+                      const rowHeight = 96; // h-24 = 96px
                       const showGroupHeaders = groupByMilestone && milestones.length > 0;
                       milestoneGroups.forEach(group => {
                         if (showGroupHeaders && group.tasks.length > 0) {
