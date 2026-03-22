@@ -1,22 +1,25 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { Task, Milestone } from '@/types/task';
 import { taskService } from '@/services/task.service';
-import { ChevronLeft, ChevronRight, Diamond } from 'lucide-react';
+import { Diamond } from 'lucide-react';
 import {
-  format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks,
+  format, startOfWeek, endOfWeek, eachDayOfInterval,
   isSameDay, parseISO, isAfter, startOfDay,
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { CreateTaskDialog } from './create-task-dialog';
+import { EventPopover } from './event-popover';
+import { getEventColor, getEventBlockStyle } from './calendar-colors';
 
 interface TaskCalendarWeekProps {
   tasks: Task[];
   onUpdate: () => void;
   milestones?: Milestone[];
   projectId?: string;
+  currentDate: Date;
+  onDateChange: (date: Date) => void;
 }
 
 const HOUR_HEIGHT = 64;
@@ -36,12 +39,14 @@ interface TaskBlock {
 
 function isAllDayTask(task: Task): boolean {
   if (!task.dueDate) return false;
-  const due = parseISO(task.dueDate);
-  if (task.startDate) {
-    const start = parseISO(task.startDate);
-    return start.getHours() === 0 && start.getMinutes() === 0 && due.getHours() === 0 && due.getMinutes() === 0;
-  }
-  return due.getHours() === 0 && due.getMinutes() === 0;
+  if (!task.startDate) return false;
+  const start = startOfDay(parseISO(task.startDate));
+  const due = startOfDay(parseISO(task.dueDate));
+  // 複数日にまたがり、かつ時刻が00:00のタスクのみ終日扱い
+  if (!isAfter(due, start)) return false;
+  const s = parseISO(task.startDate);
+  const d = parseISO(task.dueDate);
+  return s.getHours() === 0 && s.getMinutes() === 0 && d.getHours() === 0 && d.getMinutes() === 0;
 }
 
 function assignOverlapColumns(blocks: TaskBlock[]): TaskBlock[] {
@@ -69,11 +74,10 @@ function assignOverlapColumns(blocks: TaskBlock[]): TaskBlock[] {
   return result;
 }
 
-export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }: TaskCalendarWeekProps) {
-  const router = useRouter();
-  const [currentDate, setCurrentDate] = useState(new Date());
+export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId, currentDate, onDateChange }: TaskCalendarWeekProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [createInfo, setCreateInfo] = useState<{ date: string; startTime?: string } | null>(null);
+  const [popoverTask, setPopoverTask] = useState<{ task: Task; rect: DOMRect } | null>(null);
 
   const weekStart = startOfWeek(currentDate, { locale: ja });
   const weekEnd = endOfWeek(currentDate, { locale: ja });
@@ -113,7 +117,12 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
 
         let blockStartMin = isSameDay(day, startDate) ? startDate.getHours() * 60 + startDate.getMinutes() : 0;
         let blockEndMin = isSameDay(day, dueDate) ? dueDate.getHours() * 60 + dueDate.getMinutes() : 24 * 60;
-        if (blockEndMin <= blockStartMin) blockEndMin = blockStartMin + 30;
+        // 時刻が00:00のタスク（時間未指定）はデフォルトで9:00-10:00に表示
+        if (blockStartMin === 0 && blockEndMin === 0) {
+          blockStartMin = 9 * 60;
+          blockEndMin = 10 * 60;
+        }
+        if (blockEndMin <= blockStartMin) blockEndMin = blockStartMin + 60;
 
         blocks.push({
           task, dayIndex,
@@ -140,24 +149,6 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
     const seen = new Set<string>();
     return allDayBlocks.filter(b => { if (seen.has(b.task.id)) return false; seen.add(b.task.id); return true; });
   }, [allDayBlocks]);
-
-  const getBlockStyle = (task: Task) => {
-    if (task.status === 'done') return 'bg-green-50 border-green-500 text-green-800 hover:bg-green-100';
-    if (task.status === 'in_progress') return 'bg-blue-50 border-blue-500 text-blue-800 hover:bg-blue-100';
-    const today = startOfDay(new Date());
-    const due = task.dueDate ? startOfDay(parseISO(task.dueDate)) : null;
-    if (due && isAfter(today, due)) return 'bg-red-50 border-red-500 text-red-800 hover:bg-red-100';
-    return 'bg-slate-50 border-slate-400 text-slate-700 hover:bg-slate-100';
-  };
-
-  const getTimeStyle = (task: Task) => {
-    if (task.status === 'done') return 'text-green-600';
-    if (task.status === 'in_progress') return 'text-blue-600';
-    const today = startOfDay(new Date());
-    const due = task.dueDate ? startOfDay(parseISO(task.dueDate)) : null;
-    if (due && isAfter(today, due)) return 'text-red-500';
-    return 'text-slate-500';
-  };
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -242,11 +233,14 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
     if (clickTimerRef.current) {
       const dx = Math.abs(e.clientX - clickTimerRef.current.x);
       const dy = Math.abs(e.clientY - clickTimerRef.current.y);
-      if (dx < 5 && dy < 5) router.push(`/tasks/${block.task.id}`);
+      if (dx < 5 && dy < 5) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setPopoverTask({ task: block.task, rect });
+      }
     }
     clickTimerRef.current = null;
     handlePointerUp(e);
-  }, [router, handlePointerUp]);
+  }, [handlePointerUp]);
 
   const getBlockDisplay = (block: TaskBlock) => {
     if (dragState && dragState.taskId === block.task.id && block.dayIndex === dragState.originalDayIndex) {
@@ -275,53 +269,22 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
   const isCurrentWeek = weekDays.some(d => isSameDay(d, now));
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-200 bg-gray-50/50">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">
-            {format(weekStart, 'yyyy年 M月d日', { locale: ja })}
-            <span className="text-gray-400 mx-2">–</span>
-            {format(weekEnd, 'M月d日', { locale: ja })}
-          </h2>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentDate(subWeeks(currentDate, 1))}
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-600"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setCurrentDate(new Date())}
-              className="px-3 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              今日
-            </button>
-            <button
-              onClick={() => setCurrentDate(addWeeks(currentDate, 1))}
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-600"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <div className="bg-white overflow-hidden h-full flex flex-col">
       {/* Day headers */}
-      <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-gray-200">
+      <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-gray-200 flex-shrink-0">
         <div className="border-r border-gray-100" />
         {weekDays.map((day, i) => {
-          const isToday = isSameDay(day, new Date());
+          const isDayToday = isSameDay(day, new Date());
           const isSun = day.getDay() === 0;
           const isSat = day.getDay() === 6;
           const dayMilestones = milestones.filter(m => isSameDay(parseISO(m.dueDate), day));
           return (
-            <div key={i} className={`py-3 text-center border-r border-gray-100 ${isToday ? 'bg-blue-50' : ''}`}>
+            <div key={i} className={`py-3 text-center border-r border-gray-100 ${isDayToday ? 'bg-blue-50' : ''}`}>
               <div className={`text-xs font-medium mb-1 ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-500'}`}>
                 {format(day, 'E', { locale: ja })}
               </div>
               <div className={`text-xl font-bold inline-flex items-center justify-center w-9 h-9 rounded-full mx-auto ${
-                isToday
+                isDayToday
                   ? 'bg-blue-600 text-white'
                   : isSun ? 'text-red-500' : isSat ? 'text-blue-600' : 'text-gray-800'
               }`}>
@@ -340,25 +303,28 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
 
       {/* All-day row */}
       {allDayTasks.length > 0 && (
-        <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50/30">
+        <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-gray-200 bg-gray-50/30 flex-shrink-0">
           <div className="border-r border-gray-100 text-xs text-gray-400 font-medium flex items-center justify-center py-2">終日</div>
           {weekDays.map((day, dayIndex) => {
             const dayAllDay = allDayBlocks.filter(b => b.dayIndex === dayIndex);
             return (
               <div key={dayIndex} className="border-r border-gray-100 p-1.5 min-h-[36px] space-y-0.5">
-                {dayAllDay.map(block => (
-                  <div
-                    key={block.task.id}
-                    onClick={() => router.push(`/tasks/${block.task.id}`)}
-                    className={`text-xs font-medium px-2 py-1 rounded-md truncate cursor-pointer transition-opacity hover:opacity-80 ${
-                      block.task.status === 'done'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}
-                  >
-                    {block.task.title}
-                  </div>
-                ))}
+                {dayAllDay.map(block => {
+                  const color = getEventColor(block.task);
+                  return (
+                    <div
+                      key={block.task.id}
+                      onClick={(e) => {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setPopoverTask({ task: block.task, rect });
+                      }}
+                      className="text-xs font-medium px-2 py-1 rounded-lg truncate cursor-pointer transition-all hover:brightness-90"
+                      style={{ backgroundColor: color.bg, color: color.text }}
+                    >
+                      {block.task.title}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -366,7 +332,7 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
       )}
 
       {/* Time grid */}
-      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto"
         onPointerMove={dragState ? handlePointerMove : undefined}>
         <div className="grid grid-cols-[56px_repeat(7,1fr)] relative" data-week-grid>
           {/* Time labels */}
@@ -384,20 +350,19 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
 
           {/* Day columns */}
           {weekDays.map((day, dayIndex) => {
-            const isToday = isSameDay(day, new Date());
+            const isDayToday = isSameDay(day, new Date());
             const dayTimedBlocks = timedBlocks.filter(b => getBlockDisplay(b).dayIndex === dayIndex);
 
             return (
               <div
                 key={dayIndex}
-                className={`border-r border-gray-100 relative cursor-pointer ${isToday ? 'bg-blue-50/20' : 'hover:bg-gray-50/50'}`}
+                className={`border-r border-gray-100 relative cursor-pointer ${isDayToday ? 'bg-blue-50/20' : 'hover:bg-gray-50/50'}`}
                 onClick={e => handleEmptySlotClick(e, dayIndex)}
               >
                 {HOURS.map(hour => (
                   <div key={hour} className="border-b border-gray-100" style={{ height: `${HOUR_HEIGHT}px` }} />
                 ))}
 
-                {/* Half-hour lines */}
                 {HOURS.map(hour => (
                   <div
                     key={`half-${hour}`}
@@ -406,7 +371,7 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
                   />
                 ))}
 
-                {isCurrentWeek && isToday && (
+                {isCurrentWeek && isDayToday && (
                   <div
                     className="absolute left-0 right-0 border-t-2 border-red-400 z-20 pointer-events-none"
                     style={{ top: `${currentTimeTop}px` }}
@@ -423,15 +388,16 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
                   const widthCalc = block.totalCols > 1
                     ? `calc(${colFraction * 100}% - ${GAP}px)`
                     : `calc(100% - 4px)`;
+                  const blockStyle = getEventBlockStyle(block.task);
 
                   return (
                     <div
                       key={`${block.task.id}-${block.dayIndex}`}
-                      className={`absolute border-l-[3px] rounded-md px-2 py-1 overflow-hidden select-none z-10 transition-shadow
-                        ${getBlockStyle(block.task)}
-                        ${display.isDragging ? 'shadow-xl opacity-90 cursor-grabbing z-30 ring-2 ring-blue-400' : 'shadow-sm hover:shadow-md cursor-grab'}
+                      className={`absolute px-2 py-1 overflow-hidden select-none z-10 transition-shadow
+                        ${display.isDragging ? 'shadow-xl opacity-90 cursor-grabbing z-30 ring-2 ring-blue-400' : 'shadow-sm hover:shadow-md cursor-grab hover:brightness-90'}
                       `}
                       style={{
+                        ...blockStyle,
                         top: `${display.topPx + 1}px`,
                         height: `${Math.max(MIN_BLOCK_HEIGHT, display.heightPx - 2)}px`,
                         left: `calc(${leftPct}% + 2px)`,
@@ -442,14 +408,14 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
                     >
                       <div className="text-xs font-semibold leading-snug truncate">{block.task.title}</div>
                       {display.heightPx > 48 && (
-                        <div className={`text-[11px] mt-0.5 leading-none ${getTimeStyle(block.task)}`}>
+                        <div className="text-[11px] mt-0.5 leading-none opacity-80">
                           {block.task.startDate ? format(parseISO(block.task.startDate), 'HH:mm') : ''}
                           {block.task.startDate && block.task.dueDate ? '–' : ''}
                           {block.task.dueDate ? format(parseISO(block.task.dueDate), 'HH:mm') : ''}
                         </div>
                       )}
                       <div
-                        className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-black/5 rounded-b-md"
+                        className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-white/20 rounded-b-lg"
                         onPointerDown={e => { e.stopPropagation(); handlePointerDown(e, block, 'resize'); }}
                         onPointerUp={e => { e.stopPropagation(); handlePointerUp(e); }}
                       />
@@ -470,6 +436,14 @@ export function TaskCalendarWeek({ tasks, onUpdate, milestones = [], projectId }
           projectId={projectId}
           initialDueDate={createInfo.date}
           initialStartDate={createInfo.date}
+        />
+      )}
+
+      {popoverTask && (
+        <EventPopover
+          task={popoverTask.task}
+          anchorRect={popoverTask.rect}
+          onClose={() => setPopoverTask(null)}
         />
       )}
     </div>

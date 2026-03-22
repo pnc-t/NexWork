@@ -1,21 +1,24 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { Task, Milestone } from '@/types/task';
 import { taskService } from '@/services/task.service';
-import { ChevronLeft, ChevronRight, Diamond } from 'lucide-react';
+import { Diamond } from 'lucide-react';
 import {
-  format, addDays, subDays, isSameDay, parseISO, isAfter, startOfDay,
+  format, isSameDay, parseISO, isAfter, startOfDay,
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { CreateTaskDialog } from './create-task-dialog';
+import { EventPopover } from './event-popover';
+import { getEventColor, getEventBlockStyle } from './calendar-colors';
 
 interface TaskCalendarDayProps {
   tasks: Task[];
   onUpdate: () => void;
   milestones?: Milestone[];
   projectId?: string;
+  currentDate: Date;
+  onDateChange: (date: Date) => void;
 }
 
 const HOUR_HEIGHT = 64;
@@ -51,11 +54,10 @@ function assignCols(blocks: DayBlock[]): DayBlock[] {
   return result;
 }
 
-export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }: TaskCalendarDayProps) {
-  const router = useRouter();
-  const [currentDate, setCurrentDate] = useState(new Date());
+export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId, currentDate, onDateChange }: TaskCalendarDayProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [createInfo, setCreateInfo] = useState<{ date: string; startTime?: string } | null>(null);
+  const [popoverTask, setPopoverTask] = useState<{ task: Task; rect: DOMRect } | null>(null);
 
   const isToday = isSameDay(currentDate, new Date());
 
@@ -68,15 +70,14 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
 
   const allDayTasksForDay = useMemo(() =>
     tasks.filter(t => {
-      if (!t.dueDate) return false;
-      const due = parseISO(t.dueDate);
-      if (!isSameDay(due, currentDate)) {
-        if (!t.startDate) return false;
-        const start = startOfDay(parseISO(t.startDate));
-        const end = startOfDay(due);
-        return !isAfter(start, currentDate) && !isAfter(currentDate, end);
-      }
-      return due.getHours() === 0 && due.getMinutes() === 0;
+      if (!t.dueDate || !t.startDate) return false;
+      const s = parseISO(t.startDate);
+      const d = parseISO(t.dueDate);
+      // 複数日にまたがり、かつ時刻が00:00のタスクのみ終日扱い
+      if (!isAfter(startOfDay(d), startOfDay(s))) return false;
+      if (s.getHours() !== 0 || s.getMinutes() !== 0 || d.getHours() !== 0 || d.getMinutes() !== 0) return false;
+      // 当日を含むか
+      return !isAfter(startOfDay(s), startOfDay(currentDate)) && !isAfter(startOfDay(currentDate), startOfDay(d));
     }),
   [tasks, currentDate]);
 
@@ -85,19 +86,23 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
     tasks.forEach(task => {
       if (!task.dueDate) return;
       const due = parseISO(task.dueDate);
+      // 当日を含まないタスクはスキップ
       if (
         !isSameDay(due, currentDate) &&
         !(task.startDate && !isAfter(startOfDay(parseISO(task.startDate)), currentDate) && !isAfter(currentDate, startOfDay(due)))
       ) return;
-      if (
-        due.getHours() === 0 && due.getMinutes() === 0 &&
-        (!task.startDate || (parseISO(task.startDate).getHours() === 0 && parseISO(task.startDate).getMinutes() === 0))
-      ) return;
+      // 終日タスク（複数日+00:00）はスキップ（allDayで表示される）
+      if (allDayTasksForDay.some(t => t.id === task.id)) return;
 
       const startDate = task.startDate ? parseISO(task.startDate) : due;
-      const blockStartMin = isSameDay(startDate, currentDate) ? startDate.getHours() * 60 + startDate.getMinutes() : 0;
+      let blockStartMin = isSameDay(startDate, currentDate) ? startDate.getHours() * 60 + startDate.getMinutes() : 0;
       let blockEndMin = isSameDay(due, currentDate) ? due.getHours() * 60 + due.getMinutes() : 24 * 60;
-      if (blockEndMin <= blockStartMin) blockEndMin = blockStartMin + 30;
+      // 時刻が00:00のタスク（時間未指定）はデフォルトで9:00-10:00に表示
+      if (blockStartMin === 0 && blockEndMin === 0) {
+        blockStartMin = 9 * 60;
+        blockEndMin = 10 * 60;
+      }
+      if (blockEndMin <= blockStartMin) blockEndMin = blockStartMin + 60;
 
       raw.push({
         task,
@@ -107,27 +112,9 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
       });
     });
     return assignCols(raw);
-  }, [tasks, currentDate]);
+  }, [tasks, currentDate, allDayTasksForDay]);
 
   const dayMilestones = milestones.filter(m => isSameDay(parseISO(m.dueDate), currentDate));
-
-  const getBlockStyle = (task: Task) => {
-    if (task.status === 'done') return 'bg-green-50 border-green-500 text-green-800 hover:bg-green-100';
-    if (task.status === 'in_progress') return 'bg-blue-50 border-blue-500 text-blue-800 hover:bg-blue-100';
-    const today = startOfDay(new Date());
-    const due = task.dueDate ? startOfDay(parseISO(task.dueDate)) : null;
-    if (due && isAfter(today, due)) return 'bg-red-50 border-red-500 text-red-800 hover:bg-red-100';
-    return 'bg-slate-50 border-slate-400 text-slate-700 hover:bg-slate-100';
-  };
-
-  const getTimeStyle = (task: Task) => {
-    if (task.status === 'done') return 'text-green-600';
-    if (task.status === 'in_progress') return 'text-blue-600';
-    const today = startOfDay(new Date());
-    const due = task.dueDate ? startOfDay(parseISO(task.dueDate)) : null;
-    if (due && isAfter(today, due)) return 'text-red-500';
-    return 'text-slate-500';
-  };
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -219,72 +206,60 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
   const isSat = currentDate.getDay() === 6;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-200 bg-gray-50/50">
-        <div className="flex items-center justify-between">
+    <div className="bg-white overflow-hidden h-full flex flex-col">
+      {/* Day header */}
+      <div className="px-5 py-3 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className={`text-xl font-bold inline-flex items-center justify-center w-10 h-10 rounded-full ${
+            isToday
+              ? 'bg-blue-600 text-white'
+              : isSun ? 'text-red-500' : isSat ? 'text-blue-600' : 'text-gray-800'
+          }`}>
+            {format(currentDate, 'd')}
+          </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-              <span className={isSun ? 'text-red-600' : isSat ? 'text-blue-600' : ''}>
-                {format(currentDate, 'yyyy年 M月d日(E)', { locale: ja })}
-              </span>
-              {isToday && (
-                <span className="text-xs bg-blue-100 text-blue-700 font-medium px-2 py-0.5 rounded-full">今日</span>
-              )}
-            </h2>
-            {dayMilestones.length > 0 && (
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                {dayMilestones.map(m => (
-                  <span key={m.id} className="flex items-center gap-1 text-xs text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
-                    <Diamond className="w-3 h-3 fill-current" />{m.name}
-                  </span>
-                ))}
-              </div>
+            <span className={`text-sm font-medium ${isSun ? 'text-red-600' : isSat ? 'text-blue-600' : 'text-gray-600'}`}>
+              {format(currentDate, 'E', { locale: ja })}
+            </span>
+            {isToday && (
+              <span className="text-xs bg-blue-100 text-blue-700 font-medium px-2 py-0.5 rounded-full ml-2">今日</span>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentDate(subDays(currentDate, 1))}
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-600"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setCurrentDate(new Date())}
-              className="px-3 py-1 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              今日
-            </button>
-            <button
-              onClick={() => setCurrentDate(addDays(currentDate, 1))}
-              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-600"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
         </div>
+        {dayMilestones.length > 0 && (
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {dayMilestones.map(m => (
+              <span key={m.id} className="flex items-center gap-1 text-xs text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full font-medium">
+                <Diamond className="w-3 h-3 fill-current" />{m.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* All-day tasks */}
       {allDayTasksForDay.length > 0 && (
-        <div className="flex border-b border-gray-200 bg-gray-50/30">
+        <div className="flex border-b border-gray-200 bg-gray-50/30 flex-shrink-0">
           <div className="w-14 flex-shrink-0 border-r border-gray-100 text-xs text-gray-400 font-medium flex items-center justify-center py-2">
             終日
           </div>
           <div className="flex-1 p-2 flex flex-wrap gap-1.5">
-            {allDayTasksForDay.map(task => (
-              <div
-                key={task.id}
-                onClick={() => router.push(`/tasks/${task.id}`)}
-                className={`text-xs font-medium px-2.5 py-1 rounded-md cursor-pointer transition-opacity hover:opacity-80 ${
-                  task.status === 'done'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-blue-100 text-blue-800'
-                }`}
-              >
-                {task.title}
-              </div>
-            ))}
+            {allDayTasksForDay.map(task => {
+              const color = getEventColor(task);
+              return (
+                <div
+                  key={task.id}
+                  onClick={(e) => {
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    setPopoverTask({ task, rect });
+                  }}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg cursor-pointer transition-all hover:brightness-90"
+                  style={{ backgroundColor: color.bg, color: color.text }}
+                >
+                  {task.title}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -292,8 +267,7 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
       {/* Time grid */}
       <div
         ref={scrollRef}
-        className="overflow-y-auto"
-        style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '400px' }}
+        className="flex-1 overflow-y-auto"
         onPointerMove={dragState ? handlePointerMove : undefined}
       >
         <div className="flex relative">
@@ -319,7 +293,6 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
               <div key={hour} className="border-b border-gray-100" style={{ height: `${HOUR_HEIGHT}px` }} />
             ))}
 
-            {/* Half-hour lines */}
             {HOURS.map(hour => (
               <div
                 key={`half-${hour}`}
@@ -345,15 +318,16 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
               const widthCalc = block.totalCols > 1
                 ? `calc(${colFraction * 100}% - ${GAP}px)`
                 : `calc(100% - 8px)`;
+              const blockStyle = getEventBlockStyle(block.task);
 
               return (
                 <div
                   key={block.task.id}
-                  className={`absolute border-l-[3px] rounded-md px-2.5 py-1.5 overflow-hidden select-none z-10 transition-shadow
-                    ${getBlockStyle(block.task)}
-                    ${display.isDragging ? 'shadow-xl opacity-90 cursor-grabbing z-30 ring-2 ring-blue-400' : 'shadow-sm hover:shadow-md cursor-grab'}
+                  className={`absolute px-2.5 py-1.5 overflow-hidden select-none z-10 transition-shadow
+                    ${display.isDragging ? 'shadow-xl opacity-90 cursor-grabbing z-30 ring-2 ring-blue-400' : 'shadow-sm hover:shadow-md cursor-grab hover:brightness-90'}
                   `}
                   style={{
+                    ...blockStyle,
                     top: `${display.topPx + 1}px`,
                     height: `${Math.max(MIN_BLOCK_HEIGHT, display.heightPx - 2)}px`,
                     left: `calc(${leftPct}% + 4px)`,
@@ -369,7 +343,10 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
                     if (clickRef.current) {
                       const dx = Math.abs(e.clientX - clickRef.current.x);
                       const dy = Math.abs(e.clientY - clickRef.current.y);
-                      if (dx < 5 && dy < 5) router.push(`/tasks/${block.task.id}`);
+                      if (dx < 5 && dy < 5) {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setPopoverTask({ task: block.task, rect });
+                      }
                     }
                     clickRef.current = null;
                     handlePointerUp(e);
@@ -377,7 +354,7 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
                 >
                   <div className="text-xs font-semibold leading-snug truncate">{block.task.title}</div>
                   {display.heightPx > 48 && (
-                    <div className={`text-[11px] mt-0.5 leading-none ${getTimeStyle(block.task)}`}>
+                    <div className="text-[11px] mt-0.5 leading-none opacity-80">
                       {block.task.startDate ? format(parseISO(block.task.startDate), 'HH:mm') : ''}
                       {block.task.startDate && block.task.dueDate ? '–' : ''}
                       {block.task.dueDate ? format(parseISO(block.task.dueDate), 'HH:mm') : ''}
@@ -387,7 +364,7 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
                     <div className="text-[11px] mt-1 line-clamp-2 opacity-70">{block.task.description}</div>
                   )}
                   <div
-                    className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-black/5 rounded-b-md"
+                    className="absolute bottom-0 left-0 right-0 h-3 cursor-s-resize hover:bg-white/20 rounded-b-lg"
                     onPointerDown={e => { e.stopPropagation(); handlePointerDown(e, block, 'resize'); }}
                     onPointerUp={e => { e.stopPropagation(); handlePointerUp(e); }}
                   />
@@ -406,6 +383,14 @@ export function TaskCalendarDay({ tasks, onUpdate, milestones = [], projectId }:
           projectId={projectId}
           initialDueDate={createInfo.date}
           initialStartDate={createInfo.date}
+        />
+      )}
+
+      {popoverTask && (
+        <EventPopover
+          task={popoverTask.task}
+          anchorRect={popoverTask.rect}
+          onClose={() => setPopoverTask(null)}
         />
       )}
     </div>
