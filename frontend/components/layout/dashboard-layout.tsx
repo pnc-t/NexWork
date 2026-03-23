@@ -16,9 +16,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}/>
 
-                <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-                    <Breadcrumb />
-                    {children}
+                <main className="flex-1 overflow-y-auto flex flex-col">
+                    <div className="px-3 lg:px-4 flex-shrink-0">
+                        <Breadcrumb />
+                    </div>
+                    <div className="flex-1 min-h-0 px-6 lg:px-8">
+                        {children}
+                    </div>
                 </main>
             </div>
 
