@@ -455,10 +455,14 @@ export default function DashboardPage() {
         </div>
 
         {/* 完了率推移チャート */}
-        <CompletionTrendChart tasks={tasks} />
+        <div className="lg:col-span-2">
+          <CompletionTrendChart tasks={tasks} />
+        </div>
 
         {/* 最近のアクティビティ */}
-        <ActivityFeed tasks={tasks} />
+        <div className="lg:col-span-2">
+          <ActivityFeed tasks={tasks} />
+        </div>
 
         {/* プロジェクト */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">

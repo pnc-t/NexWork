@@ -17,24 +17,23 @@ export function CompletionTrendChart({ tasks }: CompletionTrendChartProps) {
     const today = startOfDay(new Date());
     const points = [];
 
+    const totalTasks = tasks.length;
+
     for (let i = range - 1; i >= 0; i--) {
       const day = subDays(today, i);
       const completedByDay = tasks.filter((t) => {
         if (t.status !== 'done') return false;
-        const updated = startOfDay(parseISO(t.updatedAt));
-        return isBefore(updated, day) || isSameDay(updated, day);
-      }).length;
-
-      const total = tasks.filter((t) => {
-        const created = startOfDay(parseISO(t.createdAt));
-        return isBefore(created, day) || isSameDay(created, day);
+        const endDate = t.actualEndDate
+          ? startOfDay(parseISO(t.actualEndDate))
+          : startOfDay(parseISO(t.updatedAt));
+        return isBefore(endDate, day) || isSameDay(endDate, day);
       }).length;
 
       points.push({
         date: format(day, 'M/d', { locale: ja }),
         completed: completedByDay,
-        total,
-        rate: total > 0 ? Math.round((completedByDay / total) * 100) : 0,
+        total: totalTasks,
+        rate: totalTasks > 0 ? Math.round((completedByDay / totalTasks) * 100) : 0,
       });
     }
 
@@ -59,7 +58,7 @@ export function CompletionTrendChart({ tasks }: CompletionTrendChartProps) {
           ))}
         </div>
       </div>
-      <div className="h-48">
+      <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
